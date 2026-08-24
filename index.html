@@ -1275,6 +1275,26 @@
     </div>
 </div>
 
+<!-- Chat: floating draggable message channel -->
+<div class="message-channel hidden" id="messageChannel">
+    <div class="channel-header" id="channelHeader">
+        <span class="channel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Messages
+        </span>
+        <button class="close-channel-btn" id="closeChannelBtn" title="Close" aria-label="Close chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+    </div>
+    <div class="channel-messages" id="channelMessages"></div>
+    <form class="chat-input-container" id="chatForm">
+        <input type="text" id="channelInput" class="chat-input" placeholder="Type a message…" maxlength="500" autocomplete="off">
+        <button type="submit" class="send-btn" id="sendChannelMessage" title="Send" aria-label="Send">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+    </form>
+</div>
+
 <!-- Entry Screen -->
 <div id="entryScreen">
     <div class="entry-inner">
@@ -1313,6 +1333,10 @@
         <button class="ctrl-btn hide-on-mobile" id="liveToggleScreen" title="Share screen">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         </button>
+        <button class="ctrl-btn" id="chatBtn" title="Chat" data-active="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span class="chat-unread-dot hidden" id="chatUnreadDot"></span>
+        </button>
         <button class="ctrl-btn danger" id="leaveBtn" title="Leave room">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         </button>
@@ -1325,8 +1349,9 @@
     'use strict';
 
     // ── LiveKit Cloud ──
-    // Sandbox token server (dev only): mints join tokens so this static page
-    // needs no backend. For production, mint tokens in a Cloud Function instead.
+    // Development token server (LiveKit-hosted, dev/test only): mints join
+    // tokens so this static page needs no backend. For production, mint tokens
+    // in a Cloud Function instead.
     const LIVEKIT_SANDBOX_ID = 'tinyroom-2mbudw';
     const ROOM_PREFIX = 'tinyroom2-';
     const LK = window.LivekitClient;
@@ -1344,23 +1369,24 @@
     const topbarRoomCode = $('topbarRoomCode');
     const cameraGrid = $('cameraGrid');
     const screenshareGrid = $('screenshareGrid');
-
-    // LiveKit tiles lay out via the camera-N grid classes; no manual drag layout.
-    $('resetLayoutBtn').style.display = 'none';
+    const liveContent = document.querySelector('.live-content');
 
     let room = null;         // LiveKit Room while connected
     let roomCode = '';
     let localName = '';
     let nameHintTimer = null;
     let codeHintTimer = null;
+    const audioEls = new Map();   // identity → [<audio>] (remote mics)
 
-    // ── SVG Icons (control-bar state swaps) ──
+    // ── SVG Icons ──
     const ICONS = {
         camOn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>',
         camOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>',
         micOn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
         micOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2c0 .76-.13 1.5-.35 2.18"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>'
     };
+    const ICONS_EXPAND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+    const ICONS_SHRINK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
 
     // ── Toast Notifications ──
     const activeToasts = new Set();
@@ -1506,63 +1532,6 @@
         return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
     }
 
-    // ── Tiles ──
-    // Same structure the original TinyRoom UI used (CSS is unchanged):
-    // .video-tile > .aspect-spacer + .video-container > video + placeholder
-    function tileId(identity, streamType) {
-        return `tile-${identity}-${streamType}`;
-    }
-
-    function createTile(identity, name, streamType, isLocal) {
-        const existing = document.getElementById(tileId(identity, streamType));
-        if (existing) return existing;
-
-        const tile = document.createElement('div');
-        tile.className = 'video-tile';
-        tile.id = tileId(identity, streamType);
-        tile.dataset.memberId = identity;
-        tile.dataset.streamType = streamType;
-        tile.dataset.isLocal = String(!!isLocal);
-        tile.innerHTML = `
-            <div class="aspect-spacer"></div>
-            <div class="video-container">
-                <div class="video-placeholder"><div class="initials">${getInitials(name)}</div></div>
-            </div>`;
-        (streamType === 'screenshare' ? screenshareGrid : cameraGrid).appendChild(tile);
-        updateGrids();
-        return tile;
-    }
-
-    function removeTile(identity, streamType) {
-        const tile = document.getElementById(tileId(identity, streamType));
-        if (tile) tile.remove();
-        updateGrids();
-    }
-
-    function attachVideo(identity, streamType, track) {
-        const tile = createTile(identity, displayName(identity), streamType, isLocalIdentity(identity));
-        const container = tile.querySelector('.video-container');
-        container.querySelectorAll('video').forEach(v => v.remove());
-        const el = track.attach();
-        el.classList.add('visible');
-        container.appendChild(el);
-        tile.querySelector('.video-placeholder').classList.add('hidden');
-    }
-
-    function detachVideo(identity, streamType) {
-        const tile = document.getElementById(tileId(identity, streamType));
-        if (!tile) return;
-        tile.querySelectorAll('video').forEach(v => v.remove());
-        const ph = tile.querySelector('.video-placeholder');
-        if (ph) ph.classList.remove('hidden');
-    }
-
-    function updateGrids() {
-        const camCount = cameraGrid.children.length;
-        cameraGrid.className = 'camera-' + Math.min(Math.max(camCount, 1), 8);
-        screenshareGrid.classList.toggle('has-shares', screenshareGrid.children.length > 0);
-    }
-
     function isLocalIdentity(identity) {
         return !!(room && room.localParticipant.identity === identity);
     }
@@ -1574,12 +1543,301 @@
         return (p && (p.name || p.identity)) || identity;
     }
 
-    // ── Development token server (LiveKit-hosted; dev/test only) ──
-    // The SDK's TokenSource handles the cloud-api call and its request format.
-    async function fetchConnectionDetails(lkRoomName, participantName) {
-        if (!LIVEKIT_SANDBOX_ID || LIVEKIT_SANDBOX_ID.startsWith('__')) {
-            throw new Error('NO_SANDBOX');
+    // ── Spotlight (fullscreen) ──
+    async function toggleSpotlight(tile) {
+        const btn = tile.querySelector('.spotlight-btn');
+        if (document.fullscreenElement) {
+            await document.exitFullscreen();
+        } else {
+            try {
+                await tile.requestFullscreen();
+            } catch (e) {
+                // Fallback to CSS fullscreen if the API isn't available
+                tile.classList.add('spotlighted');
+                if (btn) btn.innerHTML = ICONS_SHRINK;
+                document.body.appendChild(tile);
+            }
         }
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+        document.querySelectorAll('.spotlight-btn').forEach(btn => {
+            const tile = btn.closest('.video-tile');
+            btn.innerHTML = document.fullscreenElement === tile ? ICONS_SHRINK : ICONS_EXPAND;
+        });
+    });
+
+    // ── Free Move & Resize ──
+    function resetTile(tile) {
+        tile.classList.remove('floating', 'spotlighted');
+        tile.style.left = '';
+        tile.style.top = '';
+        tile.style.width = '';
+        tile.style.height = '';
+        const grid = tile.dataset.streamType === 'screenshare' ? screenshareGrid : cameraGrid;
+        if (!grid.contains(tile)) grid.appendChild(tile);
+        updateGridLayout();
+    }
+
+    function makeFloating(tile, x, y, w, h) {
+        tile.classList.add('floating');
+        tile.style.left = x + 'px';
+        tile.style.top = y + 'px';
+        tile.style.width = w + 'px';
+        tile.style.height = h + 'px';
+        document.body.appendChild(tile);   // above everything
+    }
+
+    function enableDrag(tile) {
+        let startX, startY, startLeft, startTop, dragging = false, downRect = null;
+
+        function onDown(cx, cy) {
+            // Record the start only — the tile floats once a real drag begins.
+            startX = cx;
+            startY = cy;
+            downRect = tile.getBoundingClientRect();
+            startLeft = tile.classList.contains('floating') ? parseFloat(tile.style.left) : downRect.left;
+            startTop  = tile.classList.contains('floating') ? parseFloat(tile.style.top)  : downRect.top;
+            dragging = false;
+        }
+
+        function onMove(cx, cy) {
+            const dx = cx - startX;
+            const dy = cy - startY;
+            if (!dragging) {
+                if (Math.abs(dx) <= 3 && Math.abs(dy) <= 3) return;
+                dragging = true;
+                if (!tile.classList.contains('floating')) {
+                    makeFloating(tile, downRect.left, downRect.top, downRect.width, downRect.height);
+                    startLeft = downRect.left;
+                    startTop = downRect.top;
+                }
+                tile.classList.add('dragging');
+            }
+            tile.style.left = (startLeft + dx) + 'px';
+            tile.style.top = (startTop + dy) + 'px';
+        }
+
+        function onUp() { tile.classList.remove('dragging'); }
+
+        tile.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.resize-handle') || e.target.closest('.spotlight-btn') || e.target.closest('.reset-btn')) return;
+            e.preventDefault();
+            onDown(e.clientX, e.clientY);
+            function mm(e) { onMove(e.clientX, e.clientY); }
+            function mu() { onUp(); document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); }
+            document.addEventListener('mousemove', mm);
+            document.addEventListener('mouseup', mu);
+        });
+
+        tile.addEventListener('touchstart', (e) => {
+            if (e.target.closest('.resize-handle') || e.target.closest('.spotlight-btn') || e.target.closest('.reset-btn')) return;
+            const t = e.touches[0];
+            onDown(t.clientX, t.clientY);
+            function tm(e) { const t = e.touches[0]; onMove(t.clientX, t.clientY); }
+            function te() { onUp(); document.removeEventListener('touchmove', tm); document.removeEventListener('touchend', te); }
+            document.addEventListener('touchmove', tm, { passive: true });
+            document.addEventListener('touchend', te);
+        }, { passive: true });
+    }
+
+    function enableResize(tile) {
+        const handle = document.createElement('div');
+        handle.className = 'resize-handle';
+        tile.appendChild(handle);
+
+        // Snap-back button (visible only while floating)
+        const resetBtn = document.createElement('button');
+        resetBtn.className = 'reset-btn';
+        resetBtn.title = 'Snap back to grid';
+        resetBtn.innerHTML = '×';
+        resetBtn.addEventListener('click', (e) => { e.stopPropagation(); resetTile(tile); });
+        tile.appendChild(resetBtn);
+
+        let startX, startY, startW, startH;
+
+        function onDown(cx, cy) {
+            const rect = tile.getBoundingClientRect();
+            startX = cx; startY = cy; startW = rect.width; startH = rect.height;
+            if (!tile.classList.contains('floating')) makeFloating(tile, rect.left, rect.top, rect.width, rect.height);
+        }
+
+        function onMove(cx, cy) {
+            tile.style.width = Math.max(100, startW + (cx - startX)) + 'px';
+            tile.style.height = Math.max(70, startH + (cy - startY)) + 'px';
+        }
+
+        handle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onDown(e.clientX, e.clientY);
+            function mm(e) { onMove(e.clientX, e.clientY); }
+            function mu() { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); }
+            document.addEventListener('mousemove', mm);
+            document.addEventListener('mouseup', mu);
+        });
+
+        handle.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+            const t = e.touches[0];
+            onDown(t.clientX, t.clientY);
+            function tm(e) { const t = e.touches[0]; onMove(t.clientX, t.clientY); }
+            function te() { document.removeEventListener('touchmove', tm); document.removeEventListener('touchend', te); }
+            document.addEventListener('touchmove', tm, { passive: true });
+            document.addEventListener('touchend', te);
+        }, { passive: false });
+    }
+
+    $('resetLayoutBtn').addEventListener('click', () => {
+        document.querySelectorAll('.video-tile.floating, .video-tile.spotlighted').forEach(resetTile);
+    });
+
+    // ── Grid Layout / Presentation Mode ──
+    function updateGridLayout() {
+        const count = cameraGrid.querySelectorAll('.video-tile:not([style*="display: none"])').length;
+        const cls = Math.min(count, 8);
+        cameraGrid.className = cameraGrid.className.replace(/camera-\d+/g, '').trim();
+        liveContent.className = liveContent.className.replace(/camera-\d+/g, '').trim();
+        if (cls > 0) {
+            cameraGrid.classList.add(`camera-${cls}`);
+            liveContent.classList.add(`camera-${cls}`);
+        }
+        updatePresentationMode();
+    }
+
+    function updatePresentationMode() {
+        const shareCount = screenshareGrid.querySelectorAll('.video-tile:not([style*="display: none"])').length;
+        screenshareGrid.classList.toggle('has-shares', shareCount > 0);
+        liveContent.classList.toggle('presentation-mode', shareCount > 0);
+        liveContent.classList.toggle('shares-1', shareCount === 1);
+        liveContent.classList.toggle('shares-2', shareCount >= 2);
+    }
+
+    // ── Tiles ──
+    // Same structure as the original TinyRoom UI (the CSS is unchanged).
+    function tileId(identity, streamType) { return `tile-${identity}-${streamType}`; }
+
+    function createTile(identity, name, streamType, isLocal) {
+        const existing = document.getElementById(tileId(identity, streamType));
+        if (existing) return existing;
+
+        const tile = document.createElement('div');
+        tile.className = 'video-tile';
+        tile.id = tileId(identity, streamType);
+        tile.dataset.memberId = identity;
+        tile.dataset.streamType = streamType;
+        tile.dataset.isLocal = isLocal ? 'true' : 'false';
+
+        const spotlightBtn = document.createElement('button');
+        spotlightBtn.className = 'spotlight-btn';
+        spotlightBtn.title = 'Toggle fullscreen';
+        spotlightBtn.innerHTML = ICONS_EXPAND;
+        spotlightBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleSpotlight(tile); });
+        tile.appendChild(spotlightBtn);
+
+        const spacer = document.createElement('div');
+        spacer.className = 'aspect-spacer';
+        tile.appendChild(spacer);
+
+        const videoContainer = document.createElement('div');
+        videoContainer.className = 'video-container';
+
+        const placeholder = document.createElement('div');
+        placeholder.className = 'video-placeholder';
+        if (streamType === 'camera') {
+            const initialsEl = document.createElement('div');
+            initialsEl.className = 'initials';
+            initialsEl.textContent = getInitials(name);
+            placeholder.appendChild(initialsEl);
+        } else {
+            const span = document.createElement('span');
+            span.textContent = isLocal ? 'Your Screen' : `${name}'s Screen`;
+            placeholder.appendChild(span);
+        }
+
+        // LiveKit attaches its MediaStream to this element (track.attach(video)).
+        const video = document.createElement('video');
+        video.autoplay = true;
+        video.playsInline = true;
+        video.muted = true;   // audio arrives via separate hidden <audio> elements
+
+        videoContainer.appendChild(placeholder);
+        videoContainer.appendChild(video);
+        tile.appendChild(videoContainer);
+
+        // Info bar: name + LIVE badge + cam/mic indicators
+        const memberInfo = document.createElement('div');
+        memberInfo.className = 'member-info';
+        const label = streamType === 'screenshare'
+            ? (isLocal ? 'Your Screen' : `${name}'s Screen`)
+            : (isLocal ? `${name} (You)` : name);
+        const nameEl = document.createElement('span');
+        nameEl.className = 'member-name';
+        nameEl.textContent = label;
+        memberInfo.appendChild(nameEl);
+        const indicators = document.createElement('div');
+        indicators.className = 'member-indicators';
+        indicators.innerHTML = streamType === 'camera'
+            ? `<span class="status-badge active">LIVE</span>
+               <span class="indicator cam-video off" title="Camera">${ICONS.camOff}</span>
+               <span class="indicator cam-audio off" title="Microphone">${ICONS.micOff}</span>`
+            : `<span class="status-badge active">LIVE</span>`;
+        memberInfo.appendChild(indicators);
+        tile.appendChild(memberInfo);
+
+        (streamType === 'screenshare' ? screenshareGrid : cameraGrid).appendChild(tile);
+        enableDrag(tile);
+        enableResize(tile);
+        updateGridLayout();
+        return tile;
+    }
+
+    function removeTile(identity, streamType) {
+        const tile = document.getElementById(tileId(identity, streamType));
+        if (tile) {
+            if (document.fullscreenElement === tile) document.exitFullscreen().catch(() => {});
+            tile.remove();
+        }
+        updateGridLayout();
+    }
+
+    function setIndicator(tile, which, on) {
+        const ind = tile.querySelector(`.indicator.${which}`);
+        if (!ind) return;
+        ind.className = `indicator ${which} ${on ? 'on' : 'off'}`;
+        ind.innerHTML = which === 'cam-video' ? (on ? ICONS.camOn : ICONS.camOff) : (on ? ICONS.micOn : ICONS.micOff);
+    }
+
+    function showTileVideo(tile, on) {
+        const video = tile.querySelector('video');
+        const ph = tile.querySelector('.video-placeholder');
+        if (video) video.classList.toggle('visible', on);
+        if (ph) ph.classList.toggle('hidden', on);
+        if (tile.dataset.streamType === 'camera') setIndicator(tile, 'cam-video', on);
+    }
+
+    function attachVideo(identity, streamType, track) {
+        const tile = createTile(identity, displayName(identity), streamType, isLocalIdentity(identity));
+        track.attach(tile.querySelector('video'));
+        showTileVideo(tile, true);
+    }
+
+    function detachVideo(identity, streamType, track) {
+        const tile = document.getElementById(tileId(identity, streamType));
+        if (!tile) return;
+        const video = tile.querySelector('video');
+        if (track && video) track.detach(video);
+        showTileVideo(tile, false);
+    }
+
+    function setMicIndicator(identity, on) {
+        const tile = document.getElementById(tileId(identity, 'camera'));
+        if (tile) setIndicator(tile, 'cam-audio', on);
+    }
+
+    // ── Development token server ──
+    async function fetchConnectionDetails(lkRoomName, participantName) {
+        if (!LIVEKIT_SANDBOX_ID || LIVEKIT_SANDBOX_ID.startsWith('__')) throw new Error('NO_SANDBOX');
         const source = LK.TokenSource.developmentTokenServer(LIVEKIT_SANDBOX_ID);
         return source.fetch({ roomName: lkRoomName, participantName: participantName });
         // → { serverUrl, participantToken, ... }
@@ -1596,7 +1854,7 @@
         } catch (e) {
             console.error('Token error:', e);
             showToast(e.message === 'NO_SANDBOX'
-                ? 'LiveKit is not configured yet — add the sandbox ID.'
+                ? 'LiveKit is not configured yet — add the token server ID.'
                 : 'Could not reach the call service. Please try again.', { type: 'error' });
             resetEntryButtons();
             return;
@@ -1615,7 +1873,6 @@
             return;
         }
 
-        // UI: entry → live
         entryScreen.style.display = 'none';
         liveScreen.style.display = 'flex';
         topbar.style.display = 'flex';
@@ -1626,10 +1883,16 @@
         url.searchParams.set('code', roomCode);
         history.replaceState(null, '', url.toString());
 
+        clearChat();
+        addChannelMessage('Chat started', 'system');
+
         // Local tile first so you always see yourself immediately.
         createTile(room.localParticipant.identity, localName, 'camera', true);
-        // Tiles for anyone already in the room (their tracks arrive via events).
-        room.remoteParticipants.forEach(p => createTile(p.identity, p.name || p.identity, 'camera', false));
+        room.remoteParticipants.forEach(p => {
+            createTile(p.identity, p.name || p.identity, 'camera', false);
+            const mic = p.getTrackPublication(LK.Track.Source.Microphone);
+            setMicIndicator(p.identity, !!(mic && !mic.isMuted));
+        });
 
         try {
             await room.localParticipant.enableCameraAndMicrophone();
@@ -1641,9 +1904,14 @@
     }
 
     function leaveRoom() {
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
         if (room) { room.disconnect(); room = null; }
-        cameraGrid.innerHTML = '';
-        screenshareGrid.innerHTML = '';
+        document.querySelectorAll('.video-tile').forEach(t => t.remove());   // grids + floating
+        audioEls.forEach(els => els.forEach(el => el.remove()));
+        audioEls.clear();
+        updateGridLayout();
+        closeChat();
+        clearChat();
         liveScreen.style.display = 'none';
         topbar.style.display = 'none';
         entryScreen.style.display = 'flex';
@@ -1661,70 +1929,89 @@
     // ── Room events → tiles ──
     function wireRoomEvents(r) {
         const E = LK.RoomEvent;
+        const S = LK.Track.Source;
+        const sourceType = (pub) => pub.source === S.ScreenShare ? 'screenshare' : 'camera';
 
         r.on(E.ParticipantConnected, (p) => {
             createTile(p.identity, p.name || p.identity, 'camera', false);
             showToast(`${p.name || 'Someone'} joined`, { duration: 2500 });
+            maybeSendChatHistory(p);
         });
 
         r.on(E.ParticipantDisconnected, (p) => {
             removeTile(p.identity, 'camera');
             removeTile(p.identity, 'screenshare');
+            (audioEls.get(p.identity) || []).forEach(el => el.remove());
+            audioEls.delete(p.identity);
         });
 
         r.on(E.TrackSubscribed, (track, pub, p) => {
             if (track.kind === 'video') {
-                const type = pub.source === LK.Track.Source.ScreenShare ? 'screenshare' : 'camera';
-                attachVideo(p.identity, type, track);
+                attachVideo(p.identity, sourceType(pub), track);
+                if (pub.isMuted) detachVideo(p.identity, sourceType(pub), null);
             } else if (track.kind === 'audio') {
                 const el = track.attach();
                 el.style.display = 'none';
                 document.body.appendChild(el);
+                if (!audioEls.has(p.identity)) audioEls.set(p.identity, []);
+                audioEls.get(p.identity).push(el);
+                setMicIndicator(p.identity, !pub.isMuted);
             }
         });
 
         r.on(E.TrackUnsubscribed, (track, pub, p) => {
-            track.detach().forEach(el => el.remove());
             if (track.kind === 'video') {
-                const type = pub.source === LK.Track.Source.ScreenShare ? 'screenshare' : 'camera';
-                if (type === 'screenshare') removeTile(p.identity, 'screenshare');
-                else detachVideo(p.identity, 'camera');
+                if (sourceType(pub) === 'screenshare') { track.detach(); removeTile(p.identity, 'screenshare'); }
+                else detachVideo(p.identity, 'camera', track);
+            } else {
+                track.detach().forEach(el => el.remove());
+                setMicIndicator(p.identity, false);
             }
         });
 
         r.on(E.LocalTrackPublished, (pub) => {
             const track = pub.track;
-            if (!track || track.kind !== 'video') return;
-            const type = pub.source === LK.Track.Source.ScreenShare ? 'screenshare' : 'camera';
-            attachVideo(r.localParticipant.identity, type, track);
+            if (!track) return;
+            if (track.kind === 'video') attachVideo(r.localParticipant.identity, sourceType(pub), track);
+            else setMicIndicator(r.localParticipant.identity, !pub.isMuted);
             syncControlButtons();
         });
 
         r.on(E.LocalTrackUnpublished, (pub) => {
-            const type = pub.source === LK.Track.Source.ScreenShare ? 'screenshare' : 'camera';
-            if (type === 'screenshare') removeTile(r.localParticipant.identity, 'screenshare');
-            else detachVideo(r.localParticipant.identity, 'camera');
+            const id = r.localParticipant.identity;
+            if (pub.kind === 'video') {
+                if (sourceType(pub) === 'screenshare') removeTile(id, 'screenshare');
+                else detachVideo(id, 'camera', pub.track);
+            } else {
+                setMicIndicator(id, false);
+            }
             syncControlButtons();
         });
 
         r.on(E.TrackMuted, (pub, p) => {
-            if (pub.kind === 'video' && pub.source === LK.Track.Source.Camera) {
-                detachVideo(p.identity, 'camera');
-            }
+            if (pub.kind === 'video' && pub.source === S.Camera) detachVideo(p.identity, 'camera', null);
+            if (pub.kind === 'audio') setMicIndicator(p.identity, false);
             if (p === r.localParticipant) syncControlButtons();
         });
 
         r.on(E.TrackUnmuted, (pub, p) => {
-            if (pub.kind === 'video' && pub.source === LK.Track.Source.Camera && pub.track) {
-                attachVideo(p.identity, 'camera', pub.track);
-            }
+            if (pub.kind === 'video' && pub.source === S.Camera && pub.track) attachVideo(p.identity, 'camera', pub.track);
+            if (pub.kind === 'audio') setMicIndicator(p.identity, true);
             if (p === r.localParticipant) syncControlButtons();
         });
 
-        r.on(E.Disconnected, () => {
-            // Server closed the connection (or we left) — return to entry.
-            if (room) leaveRoom();
+        r.on(E.DataReceived, (payload, p, kind, topic) => {
+            if (topic !== 'chat') return;
+            let msg;
+            try { msg = JSON.parse(new TextDecoder().decode(payload)); } catch (e) { return; }
+            if (msg.type === 'chat') {
+                appendIncomingMessage({ id: msg.id, text: msg.text, author: msg.author || (p && p.name) || 'Someone' });
+            } else if (msg.type === 'history' && Array.isArray(msg.messages)) {
+                msg.messages.forEach(m => appendIncomingMessage({ id: m.id, text: m.text, author: m.author }, true));
+            }
         });
+
+        r.on(E.Disconnected, () => { if (room) leaveRoom(); });
     }
 
     // ── Controls ──
@@ -1733,7 +2020,6 @@
         const lp = room.localParticipant;
         const camOn = lp.isCameraEnabled;
         const micOn = lp.isMicrophoneEnabled;
-        const shareOn = lp.isScreenShareEnabled;
 
         const camBtn = $('liveToggleCam');
         camBtn.innerHTML = camOn ? ICONS.camOn : ICONS.camOff;
@@ -1743,7 +2029,13 @@
         micBtn.innerHTML = micOn ? ICONS.micOn : ICONS.micOff;
         micBtn.classList.toggle('off', !micOn);
 
-        $('liveToggleScreen').classList.toggle('active', shareOn);
+        $('liveToggleScreen').classList.toggle('active', lp.isScreenShareEnabled);
+
+        const localTile = document.getElementById(tileId(lp.identity, 'camera'));
+        if (localTile) {
+            setIndicator(localTile, 'cam-video', camOn);
+            setIndicator(localTile, 'cam-audio', micOn);
+        }
     }
 
     $('liveToggleCam').addEventListener('click', async () => {
@@ -1763,14 +2055,159 @@
     $('liveToggleScreen').addEventListener('click', async () => {
         if (!room) return;
         try { await room.localParticipant.setScreenShareEnabled(!room.localParticipant.isScreenShareEnabled); }
-        catch (e) {
-            if (e && e.name !== 'NotAllowedError') console.error(e);   // user cancelled the picker
-        }
+        catch (e) { if (e && e.name !== 'NotAllowedError') console.error(e); }   // user cancelled the picker
         syncControlButtons();
     });
 
     $('leaveBtn').addEventListener('click', leaveRoom);
     window.addEventListener('beforeunload', () => { if (room) room.disconnect(); });
+
+    // ── Chat: floating draggable message channel (LiveKit data channel) ──
+    const messageChannel = $('messageChannel');
+    const channelHeader = $('channelHeader');
+    const channelMessages = $('channelMessages');
+    const channelInput = $('channelInput');
+    const chatForm = $('chatForm');
+    const sendChannelBtn = $('sendChannelMessage');
+    const chatBtn = $('chatBtn');
+    const chatUnreadDot = $('chatUnreadDot');
+    const chatMessageIds = new Set();   // dedupe (history replay can overlap live delivery)
+    let chatLog = [];                   // {id, author, text} — replayed to late joiners
+
+    function isChatHidden() { return messageChannel.classList.contains('hidden'); }
+
+    // Turn URLs into safe clickable links — DOM nodes only, never innerHTML (XSS-safe)
+    function appendLinkified(el, text) {
+        const urlRe = /(https?:\/\/[^\s]+)/g;
+        let lastIndex = 0, match;
+        while ((match = urlRe.exec(text)) !== null) {
+            if (match.index > lastIndex) el.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+            const a = document.createElement('a');
+            a.href = match[0];
+            a.textContent = match[0];
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            el.appendChild(a);
+            lastIndex = match.index + match[0].length;
+        }
+        if (lastIndex < text.length) el.appendChild(document.createTextNode(text.slice(lastIndex)));
+    }
+
+    // Render a message bubble. type: 'user' | 'partner' | 'system'
+    function addChannelMessage(text, type, author) {
+        const el = document.createElement('div');
+        el.className = `chat-message ${type}-message`;
+        if (type === 'partner' && author) {
+            const a = document.createElement('span');
+            a.className = 'msg-author';
+            a.textContent = author;
+            el.appendChild(a);
+        }
+        const p = document.createElement('p');
+        appendLinkified(p, text);
+        el.appendChild(p);
+        channelMessages.appendChild(el);
+        channelMessages.scrollTop = channelMessages.scrollHeight;
+    }
+
+    function appendIncomingMessage(msg, isHistory) {
+        if (!msg || !msg.id || chatMessageIds.has(msg.id)) return;
+        chatMessageIds.add(msg.id);
+        chatLog.push({ id: msg.id, author: msg.author, text: msg.text });
+        addChannelMessage(msg.text, 'partner', msg.author || 'Someone');
+        if (!isHistory && isChatHidden()) chatUnreadDot.classList.remove('hidden');
+    }
+
+    function clearChat() {
+        channelMessages.innerHTML = '';
+        chatMessageIds.clear();
+        chatLog = [];
+        chatUnreadDot.classList.add('hidden');
+    }
+
+    function publishChat(obj, opts) {
+        if (!room) return Promise.resolve();
+        const bytes = new TextEncoder().encode(JSON.stringify(obj));
+        return room.localParticipant.publishData(bytes, Object.assign({ reliable: true, topic: 'chat' }, opts || {}));
+    }
+
+    // Late joiners get the room's chat so far. Exactly one existing member
+    // sends it (lowest identity), so the newcomer doesn't get N copies.
+    function maybeSendChatHistory(newcomer) {
+        if (!room || !chatLog.length) return;
+        const others = [...room.remoteParticipants.keys()].filter(id => id !== newcomer.identity);
+        const sender = [room.localParticipant.identity, ...others].sort()[0];
+        if (sender !== room.localParticipant.identity) return;
+        setTimeout(() => {
+            publishChat({ type: 'history', messages: chatLog.slice(-50) }, { destinationIdentities: [newcomer.identity] })
+                .catch(e => console.warn('chat history send failed', e));
+        }, 600);
+    }
+
+    function openChat() {
+        messageChannel.classList.remove('hidden');
+        chatBtn.dataset.active = 'true';
+        chatUnreadDot.classList.add('hidden');
+        if (window.matchMedia('(max-width: 640px)').matches === false) setTimeout(() => channelInput.focus(), 100);
+    }
+
+    function closeChat() {
+        messageChannel.classList.add('hidden');
+        chatBtn.dataset.active = 'false';
+    }
+
+    chatBtn.addEventListener('click', () => isChatHidden() ? openChat() : closeChat());
+    $('closeChannelBtn').addEventListener('click', closeChat);
+
+    chatForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const text = channelInput.value.trim();
+        if (!text || !room) return;
+        channelInput.value = '';
+        sendChannelBtn.disabled = true;
+        const id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
+        try {
+            await publishChat({ type: 'chat', id, text, author: localName });
+        } catch (err) {
+            console.error('chat send failed:', err);
+            showToast('Message may not have sent. Please check your connection.', { type: 'error' });
+        } finally {
+            chatMessageIds.add(id);
+            chatLog.push({ id, author: localName, text });
+            addChannelMessage(text, 'user');   // data messages aren't echoed back to the sender
+            sendChannelBtn.disabled = false;
+            channelInput.focus();
+        }
+    });
+
+    // Drag the panel by its header (desktop only — mobile is full-screen)
+    function makeDraggable(element, handle) {
+        let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+        handle.addEventListener('mousedown', (e) => {
+            if (window.matchMedia('(max-width: 640px)').matches) return;
+            if (e.target.closest('.close-channel-btn')) return;
+            e.preventDefault();
+            pos3 = e.clientX; pos4 = e.clientY;
+            document.onmouseup = () => { document.onmouseup = null; document.onmousemove = null; };
+            document.onmousemove = (ev) => {
+                ev.preventDefault();
+                pos1 = pos3 - ev.clientX; pos2 = pos4 - ev.clientY;
+                pos3 = ev.clientX; pos4 = ev.clientY;
+                element.style.top = (element.offsetTop - pos2) + 'px';
+                element.style.left = (element.offsetLeft - pos1) + 'px';
+                element.style.right = 'auto';
+                element.style.bottom = 'auto';
+            };
+        });
+    }
+    makeDraggable(messageChannel, channelHeader);
+
+    // Esc: close chat, or snap spotlighted tiles back
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (!isChatHidden()) closeChat();
+        document.querySelectorAll('.video-tile.spotlighted').forEach(resetTile);
+    });
 
     // ── Copy Helpers ──
     function flashTooltip(tooltipEl) {
