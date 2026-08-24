@@ -1388,6 +1388,44 @@
     const ICONS_EXPAND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
     const ICONS_SHRINK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
 
+    // ── Chimes ── (Web Audio; silently no-ops where audio isn't available)
+    function playTwoTone(freq1, freq2, vol, gapS) {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const play = () => {
+                const t = ctx.currentTime;
+                const gain1 = ctx.createGain();
+                gain1.connect(ctx.destination);
+                gain1.gain.setValueAtTime(vol, t);
+                gain1.gain.exponentialRampToValueAtTime(0.01, t + gapS + 0.05);
+                const osc1 = ctx.createOscillator();
+                osc1.type = 'sine';
+                osc1.frequency.value = freq1;
+                osc1.connect(gain1);
+                osc1.start(t);
+                osc1.stop(t + gapS);
+
+                const gain2 = ctx.createGain();
+                gain2.connect(ctx.destination);
+                gain2.gain.setValueAtTime(vol, t + gapS);
+                gain2.gain.exponentialRampToValueAtTime(0.01, t + gapS + 0.35);
+                const osc2 = ctx.createOscillator();
+                osc2.type = 'sine';
+                osc2.frequency.value = freq2;
+                osc2.connect(gain2);
+                osc2.start(t + gapS);
+                osc2.stop(t + gapS + 0.3);
+
+                setTimeout(() => ctx.close(), 800);
+            };
+            // Resume first — Safari and some Chrome versions start suspended.
+            if (ctx.state === 'suspended') ctx.resume().then(play); else play();
+        } catch (e) { /* audio unavailable */ }
+    }
+    // Ascending: someone joined. Descending: someone left / call ended.
+    function playParticipantJoinedTone() { playTwoTone(440, 660, 0.25, 0.15); }
+    function playParticipantLeftTone()   { playTwoTone(480, 360, 0.3, 0.2); }
+
     // ── Toast Notifications ──
     const activeToasts = new Set();
 
@@ -1905,7 +1943,7 @@
 
     function leaveRoom() {
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-        if (room) { room.disconnect(); room = null; }
+        if (room) { room.disconnect(); room = null; playParticipantLeftTone(); }   // call ended
         document.querySelectorAll('.video-tile').forEach(t => t.remove());   // grids + floating
         audioEls.forEach(els => els.forEach(el => el.remove()));
         audioEls.clear();
@@ -1935,10 +1973,13 @@
         r.on(E.ParticipantConnected, (p) => {
             createTile(p.identity, p.name || p.identity, 'camera', false);
             showToast(`${p.name || 'Someone'} joined`, { duration: 2500 });
+            playParticipantJoinedTone();
             maybeSendChatHistory(p);
         });
 
         r.on(E.ParticipantDisconnected, (p) => {
+            showToast(`${p.name || 'Someone'} left`, { duration: 2500 });
+            playParticipantLeftTone();
             removeTile(p.identity, 'camera');
             removeTile(p.identity, 'screenshare');
             (audioEls.get(p.identity) || []).forEach(el => el.remove());
