@@ -7,70 +7,123 @@
 <title>TinyRoom — Usage</title>
 <link rel="icon" href="favicon.svg">
 <style>
-  :root { --bg:#0f0f12; --card:#17171c; --soft:#1f1f26; --border:#2a2a33; --text:#f2f2f5; --muted:#9a9aa6; --accent:#7c8cff; --ok:#3ccf7a; --warn:#f5b943; --bad:#ff6b6b; --radius:14px; }
-  [data-theme="light"] { --bg:#f5f5f7; --card:#fff; --soft:#f0f0f3; --border:#e2e2e8; --text:#16161d; --muted:#6e6e78; --accent:#4f5fe0; }
-  * { box-sizing:border-box; margin:0; padding:0; }
-  body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif; font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased; }
-  .wrap { max-width:960px; margin:0 auto; padding:28px 20px 60px; }
-  header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:24px; }
-  h1 { font-size:22px; font-weight:700; letter-spacing:-.01em; }
-  h1 span { color:var(--muted); font-weight:500; }
-  .btn { font:inherit; font-size:14px; font-weight:600; padding:9px 14px; border-radius:10px; border:1px solid var(--border); background:var(--card); color:var(--text); cursor:pointer; }
-  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
-  .btn:disabled { opacity:.5; cursor:default; }
-  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-  .card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; margin-bottom:16px; }
-  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
-  .stat .k { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
-  .stat .v { font-size:28px; font-weight:700; margin-top:2px; font-variant-numeric:tabular-nums; }
-  .stat .s { font-size:12.5px; color:var(--muted); }
-  .bar { height:12px; background:var(--soft); border-radius:100px; overflow:hidden; margin:12px 0 6px; }
-  .bar > div { height:100%; background:var(--ok); border-radius:100px; transition:width .4s; }
-  .bar.warn > div { background:var(--warn); } .bar.bad > div { background:var(--bad); }
-  .cap { display:flex; justify-content:space-between; font-size:13px; color:var(--muted); }
-  table { width:100%; border-collapse:collapse; font-size:14px; }
-  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--border); vertical-align:top; }
-  th { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; font-weight:600; }
-  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
-  .pill { display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:100px; background:var(--soft); color:var(--muted); }
-  .pill.live { background:rgba(60,207,122,.15); color:var(--ok); }
-  .muted { color:var(--muted); } .small { font-size:13px; }
-  .month { font-weight:600; min-width:130px; text-align:center; }
-  #gate { text-align:center; padding:60px 20px; }
-  #gate p { color:var(--muted); margin:8px 0 18px; }
-  .err { color:var(--bad); font-size:13.5px; margin-top:10px; }
-  .hidden { display:none !important; }
-  .people { color:var(--muted); font-size:13px; }
-  @media (max-width:640px) { .stat .v { font-size:22px; } th:nth-child(4), td:nth-child(4) { display:none; } }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --radius: 12px; --max: 980px;
+    --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    --bg: #f7f9f8; --card: #ffffff; --soft: #f0f4f3; --border: #e2e8f0; --borderSoft: #dbe2ea;
+    --text: #1e293b; --muted: #64748b; --muted2: #9CA3AF;
+    --accent: #0EA5A4; --accentHover: #0d9488; --accentSoft: rgba(14,165,164,.10); --accentBorder: rgba(14,165,164,.35);
+    --liveBg: #E8F4ED; --liveBorder: #A6C5A3; --liveText: #324252;
+    --dangerBg: #FEF2F2; --dangerBorder: #fca5a5; --dangerText: #b91c1c;
+    --warnText: #b45309; --warnBg: #fef3c7;
+  }
+  [data-theme="dark"] {
+    --bg: #0f172a; --card: #111827; --soft: #1f2937; --border: #273244; --borderSoft: #334155;
+    --text: #e5e7eb; --muted: #9ca3af; --muted2: #6b7280;
+    --accent: #0EA5A4; --accentHover: #14b8a6; --accentSoft: rgba(14,165,164,.18); --accentBorder: rgba(14,165,164,.45);
+    --liveBg: rgba(16,185,129,.15); --liveBorder: rgba(16,185,129,.4); --liveText: #a7f3d0;
+    --dangerBg: rgba(239,68,68,.15); --dangerBorder: rgba(239,68,68,.4); --dangerText: #fca5a5;
+    --warnText: #fcd34d; --warnBg: rgba(245,158,11,.15);
+  }
+  html, body { height: 100%; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; }
+
+  /* Theme toggle — same as the call page */
+  #themeToggle { position: fixed; bottom: 16px; right: 16px; z-index: 100; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .2s, border-color .2s; }
+  #themeToggle:hover { border-color: var(--accent); }
+  #themeToggle svg { width: 18px; height: 18px; }
+
+  /* Topbar — mirrors the in-call topbar */
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; background: var(--card); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .topbar-left { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
+  .topbar-left strong { color: var(--text); font-weight: 800; font-size: 16px; letter-spacing: -0.2px; }
+  .topbar-btn { padding: 8px 12px; border-radius: 10px; font-size: 13px; font-weight: 600; font-family: var(--sans); border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.04); color: var(--text); cursor: pointer; transition: border-color .18s, background .18s; }
+  [data-theme="light"] .topbar-btn { border-color: rgba(0,0,0,0.22); background: rgba(0,0,0,0.02); }
+  .topbar-btn:hover { border-color: var(--accent); }
+
+  /* Entry-style gate */
+  #gate { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px; }
+  .entry-inner { width: 100%; max-width: 360px; display: flex; flex-direction: column; align-items: center; }
+  .entry-hero { text-align: center; margin-bottom: 32px; }
+  .entry-hero h1 { font-size: 36px; font-weight: 800; color: var(--text); margin-bottom: 8px; letter-spacing: -0.5px; }
+  .entry-hero p { font-size: 15px; color: var(--muted); }
+  .join-row { display: flex; gap: 8px; width: 100%; }
+  .entry-input { width: 100%; flex: 1; padding: 14px 18px; border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; background: rgba(255,255,255,0.04); color: var(--text); font-size: 16px; font-family: var(--sans); outline: none; transition: border-color .2s, box-shadow .2s; }
+  [data-theme="light"] .entry-input { border-color: rgba(0,0,0,0.22); background: rgba(0,0,0,0.02); }
+  .entry-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(14,165,164,0.15); }
+  .entry-input::placeholder { color: var(--muted2); }
+  .btn { padding: 14px 24px; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; border: 1px solid transparent; font-family: var(--sans); display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: background .18s ease, border-color .18s ease, color .18s ease, transform .15s ease, box-shadow .18s ease; }
+  .btn:active:not(:disabled) { transform: scale(0.98); }
+  .btn:disabled { cursor: not-allowed; opacity: .6; }
+  .btn-primary { font-weight: 700; background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 2px 12px rgba(14,165,164,0.25); }
+  .btn-primary:hover:not(:disabled) { background: var(--accentHover); box-shadow: 0 4px 16px rgba(14,165,164,0.35); }
+  .join-row .btn { flex: 0 0 auto; min-width: 80px; padding: 14px 20px; }
+  .name-hint { margin-top: 10px; font-size: 13px; color: var(--dangerText); text-align: center; min-height: 18px; }
+  .entry-footer { margin-top: 28px; font-size: 12px; color: var(--muted2); opacity: .65; text-align: center; }
+
+  /* Dashboard */
+  .wrap { width: 100%; max-width: var(--max); margin: 0 auto; padding: 20px 20px 80px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 14px; }
+  .card h2 { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .month { font-weight: 700; min-width: 140px; text-align: center; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .stat .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+  .stat .v { font-size: 28px; font-weight: 800; margin-top: 2px; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+  .stat .s { font-size: 12.5px; color: var(--muted); }
+  .bar { height: 10px; background: var(--soft); border: 1px solid var(--border); border-radius: 999px; overflow: hidden; margin: 12px 0 6px; }
+  .bar > div { height: 100%; background: var(--accent); border-radius: 999px; transition: width .4s; }
+  .bar.warn > div { background: #f59e0b; } .bar.bad > div { background: var(--dangerBorder); }
+  .cap { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); gap: 12px; flex-wrap: wrap; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 700; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: none; }
+  .pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accentSoft); color: var(--accent); border: 1px solid var(--accentBorder); letter-spacing: .3px; }
+  .pill.live { background: var(--liveBg); color: var(--liveText); border-color: var(--liveBorder); }
+  .muted { color: var(--muted); } .small { font-size: 13px; }
+  .people { color: var(--muted); font-size: 13px; }
+  .err { color: var(--dangerText); font-size: 13.5px; }
+  .hidden { display: none !important; }
+  @media (max-width: 640px) { .stat .v { font-size: 22px; } th:nth-child(4), td:nth-child(4) { display: none; } .entry-hero h1 { font-size: 28px; } }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1>TinyRoom <span>· usage</span></h1>
-    <div class="row">
-      <button class="btn" id="themeBtn" title="Toggle theme">◐</button>
-      <button class="btn hidden" id="lockBtn">Lock</button>
+<button id="themeToggle" title="Toggle theme">
+    <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>
+
+<div class="topbar hidden" id="topbar">
+  <div class="topbar-left"><strong>TinyRoom</strong> · usage</div>
+  <button class="topbar-btn" id="lockBtn">Lock</button>
+</div>
+
+<div id="gate">
+  <div class="entry-inner">
+    <div class="entry-hero">
+      <h1>TinyRoom</h1>
+      <p>Usage · admin only</p>
     </div>
-  </header>
-
-  <div id="gate" class="card">
-    <h2 style="font-size:18px">Admin passcode</h2>
-    <p>Usage data is only visible with the TinyRoom admin passcode.</p>
-    <form id="gateForm" class="row" style="justify-content:center">
-      <input type="password" id="passInput" class="btn" style="min-width:220px;text-align:left;font-weight:500" placeholder="Passcode" autocomplete="current-password" aria-label="Passcode">
-      <button type="submit" class="btn primary" id="unlockBtn">Unlock</button>
+    <form id="gateForm" class="join-row">
+      <input type="password" id="passInput" class="entry-input" placeholder="Passcode" autocomplete="current-password" aria-label="Passcode">
+      <button type="submit" class="btn btn-primary" id="unlockBtn">Unlock</button>
     </form>
-    <div class="err hidden" id="gateErr"></div>
+    <div class="name-hint" id="gateErr"></div>
+    <div class="entry-footer">Minutes used against the free LiveKit plan</div>
   </div>
+</div>
 
+<div class="wrap">
   <div id="dash" class="hidden">
     <div class="card">
       <div class="row" style="justify-content:space-between">
         <div class="row">
-          <button class="btn" id="prevBtn">‹</button>
+          <button class="topbar-btn" id="prevBtn">‹</button>
           <div class="month" id="monthLabel"></div>
-          <button class="btn" id="nextBtn">›</button>
+          <button class="topbar-btn" id="nextBtn">›</button>
         </div>
         <div class="small muted" id="asOf"></div>
       </div>
@@ -110,27 +163,29 @@
   let passcode = '';
   try { passcode = localStorage.getItem(PASS_KEY) || ''; } catch (e) {}
 
-  // ── Theme ──
+  // ── Theme (same behaviour + storage key as the call page) ──
+  function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('tinyroom-theme', theme);
+    document.querySelector('#themeToggle .sun-icon').style.display = theme === 'dark' ? 'block' : 'none';
+    document.querySelector('#themeToggle .moon-icon').style.display = theme === 'dark' ? 'none' : 'block';
+  }
   const savedTheme = localStorage.getItem('tinyroom-theme');
-  if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
-  $('themeBtn').onclick = () => {
-    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('tinyroom-theme', next);
-  };
+  setTheme(savedTheme || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+  $('themeToggle').addEventListener('click', () => {
+    setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
 
   // ── Passcode gate ──
   function setUnlocked(on) {
     $('gate').classList.toggle('hidden', on);
     $('dash').classList.toggle('hidden', !on);
-    $('lockBtn').classList.toggle('hidden', !on);
+    $('topbar').classList.toggle('hidden', !on);
     if (!on) setTimeout(() => $('passInput').focus(), 50);
   }
 
   function showGateErr(msg) {
-    const el = $('gateErr');
-    el.classList.toggle('hidden', !msg);
-    el.textContent = msg || '';
+    $('gateErr').textContent = msg || '';
   }
 
   $('gateForm').addEventListener('submit', async (e) => {
