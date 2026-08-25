@@ -98,7 +98,7 @@
 
 <div class="topbar hidden" id="topbar">
   <div class="topbar-left"><strong>TinyRoom</strong> · usage</div>
-  <button class="topbar-btn" id="lockBtn">Lock</button>
+  <button class="topbar-btn" id="lockBtn">Sign out</button>
 </div>
 
 <div id="gate">
@@ -109,7 +109,7 @@
     </div>
     <form id="gateForm" class="join-row">
       <input type="password" id="passInput" class="entry-input" placeholder="Passcode" autocomplete="current-password" aria-label="Passcode">
-      <button type="submit" class="btn btn-primary" id="unlockBtn">Unlock</button>
+      <button type="submit" class="btn btn-primary" id="unlockBtn">Sign in</button>
     </form>
     <div class="name-hint" id="gateErr"></div>
     <div class="entry-footer">Minutes used against the free LiveKit plan</div>
@@ -197,7 +197,7 @@
     passcode = val;
     const ok = await load();            // load() reports wrong passcodes via showGateErr
     $('unlockBtn').disabled = false;
-    $('unlockBtn').textContent = 'Unlock';
+    $('unlockBtn').textContent = 'Sign in';
     if (ok) {
       try { localStorage.setItem(PASS_KEY, passcode); } catch (e) {}
       $('passInput').value = '';
