@@ -40,13 +40,17 @@ exports.livekitWebhook = onRequest(
       const body = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body || {});
       event = await receiver.receive(body, req.get('Authorization'));
     } catch (e) {
-      console.warn('Rejected webhook (bad signature or body):', e && e.message);
+      // Log which API key LiveKit signed with (the key ID is public; the secret never is)
+      let iss = '?';
+      try { iss = JSON.parse(Buffer.from(String(req.get('Authorization') || '').split('.')[1] || '', 'base64').toString()).iss || '?'; } catch (_) {}
+      console.warn('Rejected webhook (bad signature or body):', e && e.message, '| signed by key:', iss, '| expecting:', LIVEKIT_API_KEY.value());
       res.status(401).send('invalid signature');
       return;
     }
 
     try {
       await handleEvent(event);
+      console.log('webhook ok:', event.event, (event.room && event.room.name) || '', (event.participant && event.participant.name) || '');
       res.status(200).send('ok');
     } catch (e) {
       console.error('Webhook handling failed:', e);
