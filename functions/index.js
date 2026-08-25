@@ -128,3 +128,80 @@ async function handleEvent(event) {
       break;
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// tinyroomStats — passcode-gated read API for admin.html.
+//
+// POST { passcode, month: "YYYY-MM" }  →  { month, now, sessions:[...] }
+// The passcode lives in Secret Manager; Firestore rules stay closed to clients
+// because this function reads with the Admin SDK. Wrong passcodes are slowed
+// down (800 ms) and rejected with 401.
+// ─────────────────────────────────────────────────────────────────────────────
+const crypto = require('crypto');
+const TINYROOM_ADMIN_PASSCODE = defineSecret('TINYROOM_ADMIN_PASSCODE');
+const STATS_ORIGINS = new Set(['https://room2.tinywins.space']);
+
+function passcodeMatches(given, expected) {
+  const a = crypto.createHash('sha256').update(String(given || '')).digest();
+  const b = crypto.createHash('sha256').update(String(expected || '')).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
+function monthRange(month) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(month || ''));
+  if (!m) return null;
+  const y = Number(m[1]), mo = Number(m[2]) - 1;
+  if (mo < 0 || mo > 11) return null;
+  return { start: new Date(Date.UTC(y, mo, 1)), end: new Date(Date.UTC(y, mo + 1, 1)) };
+}
+
+exports.tinyroomStats = onRequest(
+  { region: 'us-east1', secrets: [TINYROOM_ADMIN_PASSCODE], memory: '256MiB' },
+  async (req, res) => {
+    const origin = req.get('Origin') || '';
+    if (STATS_ORIGINS.has(origin)) {
+      res.set('Access-Control-Allow-Origin', origin);
+      res.set('Vary', 'Origin');
+      res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      res.set('Access-Control-Allow-Headers', 'Content-Type');
+      res.set('Access-Control-Max-Age', '3600');
+    }
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    if (req.method !== 'POST') { res.status(405).send('POST only'); return; }
+    res.set('Cache-Control', 'no-store');
+
+    const body = req.body || {};
+    const expected = TINYROOM_ADMIN_PASSCODE.value();
+    if (!expected || expected.startsWith('placeholder') || !passcodeMatches(body.passcode, expected)) {
+      await new Promise(r => setTimeout(r, 800));   // blunt brute-force attempts
+      res.status(401).json({ error: 'wrong passcode' });
+      return;
+    }
+
+    const range = monthRange(body.month);
+    if (!range) { res.status(400).json({ error: 'month must be YYYY-MM' }); return; }
+
+    try {
+      const snap = await db.collection('tinyroomSessions')
+        .where('joinedAt', '>=', admin.firestore.Timestamp.fromDate(range.start))
+        .where('joinedAt', '<', admin.firestore.Timestamp.fromDate(range.end))
+        .orderBy('joinedAt', 'desc').get();
+      const sessions = [];
+      snap.forEach(doc => {
+        const x = doc.data();
+        sessions.push({
+          roomSid: x.roomSid || null,
+          code: x.code || x.room || '',
+          name: x.name || x.identity || '',
+          joinedAt: x.joinedAt ? x.joinedAt.toMillis() : null,
+          leftAt: x.leftAt ? x.leftAt.toMillis() : null,
+          seconds: x.seconds == null ? null : x.seconds,
+        });
+      });
+      res.status(200).json({ month: body.month, now: Date.now(), sessions });
+    } catch (e) {
+      console.error('stats query failed:', e);
+      res.status(500).json({ error: 'query failed' });
+    }
+  }
+);
